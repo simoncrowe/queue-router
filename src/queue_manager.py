@@ -5,6 +5,7 @@
 from collections import deque
 from datetime import datetime
 from hashlib import sha256
+import random
 import time
 from uuid import uuid4
 
@@ -23,27 +24,34 @@ class DataQueueManager:
         self.record_access(address)
         return address
 
-    def authenticate(self, _id, token, factor):
+    def authenticate(self, identity, token, factor):
         """Determines whether an id and token are valid.
 
         Args:
-            _id: the identity or address of a node requesting access.
+            identity: the identity or address of a node requesting access.
             token: the security token used by that node.
             factor: the factor restricting time steps.
 
         Returns:
             bool: True if the node is authorised, otherwise false.
         """
-        if _id in self._queues:
+        if identity in self._queues:
             current_time = int(time.time())
 
             if token in (
-                self.generate_token(_id, current_time, factor),
-                self.generate_token(_id, current_time - factor, factor),
+                self.generate_token(identity, current_time, factor),
+                self.generate_token(identity, current_time - factor, factor),
             ):
                 return True
 
         return False
+
+    def get_any_address(self, _id):
+        """Gets a random address. Used to pair nodes for data transfer."""
+        try:
+            return random.choice(set(self._queues.keys()).difference({_id}))
+        except IndexError:
+            return None
 
     def enqueue(self, data, address=None):
         """Adds one or more items of data to one or all queues.
@@ -77,7 +85,6 @@ class DataQueueManager:
         for queue in self._queues.values():
             queue.append(data)
 
-
     def dequeue(self, address):
         """Removes first item from addressed queue and returns it.
 
@@ -107,10 +114,10 @@ class DataQueueManager:
             self._last_accesses[address] = datetime.now()
 
     @staticmethod
-    def generate_token(_id, seconds, base=10):
+    def generate_token(identity, seconds, base=10):
         return sha256(
             '{id}-{timestamp}'.format(
-                id=_id,
+                id=identity,
                 timestamp=int_factor_round(seconds, base),
             ).encode('utf-8')
         ).hexdigest()

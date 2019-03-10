@@ -5,6 +5,7 @@
 import time
 
 from flask import Flask, jsonify, Response
+from flask_cors import CORS
 from webargs import fields
 from webargs.flaskparser import use_kwargs
 
@@ -12,35 +13,59 @@ from queue_manager import DataQueueManager
 from util import int_factor_round
 
 app = Flask(__name__)
+# TODO: implement narrower CORS headers
+CORS(app)
 app.config.from_pyfile('settings.cfg')
+
 queue_manager = DataQueueManager()
 
 
 @app.route('/register', methods=['get'])
 def register():
     return jsonify(
-        {
-            'address': queue_manager.register(),
-        }
+        {'identity': queue_manager.register()}
     )
+
+
+@app.route('/pair', methods=['get'])
+@use_kwargs(
+    {
+        'identity': fields.Str(required=True, allow_none=False,),
+        'token': fields.Str(required=True, allow_none=False),
+    }
+)
+def pair(identity, token):
+    if queue_manager.authenticate(
+        identity,
+        token,
+        app.config.get('SECS_FACTOR')
+    ):
+        address = queue_manager.get_any_address(identity)
+        if address:
+            return jsonify(
+                {'address': address}
+            )
+        else:
+            return Response('', status=404)
+
+    return Response('', status=401)
 
 
 @app.route('/enqueue', methods=['post'])
 @use_kwargs(
     {
-        '_id': fields.Str(required=True, allow_none=False,),
+        'identity': fields.Str(required=True, allow_none=False,),
         'token': fields.Str(required=True, allow_none=False),
         'data': fields.Str(required=True, allow_none=False),
         'address': fields.Str(missing=None),
     }
 )
-def enqueue(_id, token, data, address):
-    authorised = queue_manager.authenticate(
-        _id,
+def enqueue(identity, token, data, address):
+    if queue_manager.authenticate(
+        identity,
         token,
         app.config.get('SECS_FACTOR')
-    )
-    if authorised:
+    ):
         result = queue_manager.enqueue(data, address)
 
         if result:
@@ -54,18 +79,17 @@ def enqueue(_id, token, data, address):
 @app.route('/dequeue', methods=['get'])
 @use_kwargs(
     {
-        '_id': fields.Str(required=True, allow_none=False),
+        'identity': fields.Str(required=True, allow_none=False),
         'token': fields.Str(required=True, allow_none=False),
     }
 )
-def dequeue(_id, token):
-    authorised = queue_manager.authenticate(
-        _id,
+def dequeue(identity, token):
+    if queue_manager.authenticate(
+        identity,
         token,
         app.config.get('SECS_FACTOR')
-    )
-    if authorised:
-        result = queue_manager.dequeue(_id)
+    ):
+        result = queue_manager.dequeue(identity)
 
         if result:
             return Response(result, status=200)

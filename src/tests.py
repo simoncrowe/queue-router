@@ -24,17 +24,17 @@ class CallLocalApiTestCase(unittest.TestCase):
         cls.registered_addresses = [
             requests.get(
                 'http://127.0.0.1:5000/register'
-            ).json()['address']
+            ).json()['identity']
             for i in range(10)
         ]
         cls.registered_address = requests.get(
             'http://127.0.0.1:5000/register'
-        ).json()['address']
+        ).json()['identity']
 
         # registered_id is used as an id when authenticating
         cls.registered_id = requests.get(
             'http://127.0.0.1:5000/register'
-        ).json()['address']
+        ).json()['identity']
 
     @classmethod
     def tearDownClass(cls):
@@ -49,13 +49,13 @@ class CallLocalApiTestCase(unittest.TestCase):
             'Request to \'/register\' returns non-OKAY status code.'
         )
         self.assertIn(
-            'address',
+            'identity',
             response.json(),
             '\'address\' key not in response JSON of \'register\' endpoint.'
         )
         address_is_uuid = True
         try:
-            uuid.UUID(response.json().get('address'), version=4)
+            uuid.UUID(response.json().get('identity'), version=4)
         except:
             address_is_uuid = False
         self.assertTrue(
@@ -78,7 +78,7 @@ class CallLocalApiTestCase(unittest.TestCase):
         )
         for address in self.registered_addresses:
             response = requests.get(
-                'http://127.0.0.1:5000/dequeue?_id={_id}&token={token}'.format(
+                'http://127.0.0.1:5000/dequeue?identity={identity}&token={token}'.format(
                     **self.get_authentication_args(address)
                 )
             )
@@ -111,7 +111,7 @@ class CallLocalApiTestCase(unittest.TestCase):
             'Request to \'/enqueue\' returns non-OKAY status code.'
         )
         response = requests.get(
-            'http://127.0.0.1:5000/dequeue?_id={_id}&token={token}'.format(
+            'http://127.0.0.1:5000/dequeue?identity={identity}&token={token}'.format(
                 **self.get_authentication_args(self.registered_address)
             )
         )
@@ -140,11 +140,11 @@ class CallLocalApiTestCase(unittest.TestCase):
         )
 
     @staticmethod
-    def get_authentication_args(_id):
+    def get_authentication_args(identity):
         return {
-            '_id': _id,
+            'identity': identity,
             'token': queue_manager.generate_token(
-                _id,
+                identity,
                 int(time.time()),
                 app.config.get('SECS_FACTOR')
             )
