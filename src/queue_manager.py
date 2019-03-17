@@ -37,10 +37,14 @@ class DataQueueManager:
         """
         if identity in self._queues:
             current_time = int(time.time())
-
+            # Allow for client time to deviate somewhat from server time
             if token in (
-                self.generate_token(identity, current_time, factor),
-                self.generate_token(identity, current_time - factor, factor),
+                    self.generate_token(
+                        identity,
+                        current_time + factor * i,
+                        factor
+                    )
+                    for i in range(-1, 2)
             ):
                 return True
 
@@ -49,7 +53,11 @@ class DataQueueManager:
     def get_any_address(self, _id):
         """Gets a random address. Used to pair nodes for data transfer."""
         try:
-            return random.choice(set(self._queues.keys()).difference({_id}))
+            return random.choice(
+                list(
+                    set(self._queues.keys()).difference({_id})
+                )
+            )
         except IndexError:
             return None
 
