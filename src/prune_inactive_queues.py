@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """Simple periodical process removes unused queues."""
 
-import sched, time
+import sched
+import time
 
 from queue_manager import DataQueueManager
 

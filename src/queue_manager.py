@@ -2,7 +2,6 @@
 """Defines logic for data queues."""
 
 from collections import deque
-from datetime import datetime
 from hashlib import sha256
 import json
 from redis import Redis

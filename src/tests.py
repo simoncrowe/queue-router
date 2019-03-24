@@ -78,7 +78,8 @@ class CallLocalApiTestCase(unittest.TestCase):
         )
         for address in self.registered_addresses:
             response = requests.get(
-                'http://127.0.0.1:5000/dequeue?identity={identity}&token={token}'.format(
+                'http://127.0.0.1:5000/dequeue'
+                '?identity={identity}&token={token}'.format(
                     **self.get_authentication_args(address)
                 )
             )
@@ -111,7 +112,8 @@ class CallLocalApiTestCase(unittest.TestCase):
             'Request to \'/enqueue\' returns non-OKAY status code.'
         )
         response = requests.get(
-            'http://127.0.0.1:5000/dequeue?identity={identity}&token={token}'.format(
+            'http://127.0.0.1:5000/dequeue'
+            '?identity={identity}&token={token}'.format(
                 **self.get_authentication_args(self.registered_address)
             )
         )
