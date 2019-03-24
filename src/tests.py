@@ -143,7 +143,7 @@ class CallLocalApiTestCase(unittest.TestCase):
     def get_authentication_args(identity):
         return {
             'identity': identity,
-            'token': queue_manager.generate_token(
+            'token': queue_manager._generate_token(
                 identity,
                 int(time.time()),
                 app.config.get('SECS_FACTOR')
