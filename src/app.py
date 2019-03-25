@@ -66,7 +66,11 @@ def enqueue(identity, token, data, address):
         token,
         app.config.get('SECS_FACTOR')
     ):
-        result = queue_manager.enqueue(data, address)
+        result = queue_manager.enqueue(
+            data,
+            sender_id=identity,
+            address=address
+        )
 
         if result:
             return Response('', status=200)
@@ -99,12 +103,41 @@ def dequeue(identity, token):
     return Response('', status=401)
 
 
+@app.route('/traffic', methods=['get'])
+@use_kwargs(
+    {
+        'token': fields.Str(required=True, allow_none=False),
+    }
+)
+def traffic(token):
+    if token == app.config.get('VISUALISER_TOKEN'):
+        return jsonify(queue_manager.get_traffic())
+
+    return Response('', status=401)
+
+
 @app.route('/secs', methods=['get'])
 def get_secs():
     return Response(
         str(int_factor_round(time.time(), app.config.get('SECS_FACTOR'))),
         status=200
     )
+
+
+@app.route('/time', methods=['get'])
+@use_kwargs(
+    {
+        'token': fields.Str(required=True, allow_none=False),
+    }
+)
+def get_time(token):
+    if token == app.config.get('VISUALISER_TOKEN'):
+        return Response(
+            str(time.time()),
+            status=200
+        )
+
+    return Response('', status=401)
 
 
 if __name__ == '__main__':

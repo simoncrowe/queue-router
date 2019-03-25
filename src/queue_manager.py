@@ -62,7 +62,7 @@ class DataQueueManager:
         except IndexError:
             return None
 
-    def enqueue(self, data, address=None):
+    def enqueue(self, data, sender_id, address=None):
         """Adds one or more items of data to one or all queues.
 
         Args:
@@ -76,25 +76,34 @@ class DataQueueManager:
         if address:
             return self._enqueue_to_single_queue(
                 address=address,
-                data=data
+                data=data,
+                sender_id=sender_id,
             )
         else:
-            self._enqueue_to_all(data)
+            self._enqueue_to_all(
+                data,
+                sender_id=sender_id,
+            )
             return True
 
-    def _enqueue_to_single_queue(self, address, data):
+    def _enqueue_to_single_queue(self, address, data, sender_id):
         queue = self._get_queue(address)
         if queue is not None:
             queue.append(data)
             self._set_queue(address, queue)
+            self.record_traffic(
+                sender_address=sender_id,
+                recipient_address=address
+            )
             return True
         return False
 
-    def _enqueue_to_all(self, data):
+    def _enqueue_to_all(self, data, sender_id):
         for address in self.get_all_addresses():
             self._enqueue_to_single_queue(
                 address=address,
                 data=data,
+                sender_id=sender_id,
             )
 
     def dequeue(self, address):
@@ -126,12 +135,30 @@ class DataQueueManager:
 
     def prune_inactive_queues(self, inactivity_threshold):
         addresses = self.get_all_addresses()
+
         for address in addresses:
             last_access_key = self._get_last_access_key(address)
             last_access = self._get_data(last_access_key)
+
             if time.time() - last_access > inactivity_threshold:
                 queue_key = self._get_queue_key(address)
-                self._delete_data(last_access_key, queue_key)
+                traffic_key = self._get_traffic_key(address)
+                self._delete_data(last_access_key, queue_key, traffic_key)
+
+    def record_traffic(self, sender_address, recipient_address):
+        traffic_key = self._get_traffic_key(sender_address)
+        traffic_dict = self._get_data(traffic_key, default=dict())
+        traffic_dict[recipient_address] = time.time()
+        self._set_data(traffic_key, traffic_dict)
+
+    def get_traffic(self):
+        addresses = self.get_all_addresses()
+        return {
+            address: self._get_data(
+                key=self._get_traffic_key(address)
+            )
+            for address in addresses
+        }
 
     def _queue_exists(self, address):
         queue_key = self._get_queue_key(address)
@@ -148,9 +175,8 @@ class DataQueueManager:
 
         """
         queue_key = self._get_queue_key(address)
-        data = self._get_data(queue_key)
-        if data is not None:
-            return deque(data)
+        data = self._get_data(queue_key, default=list())
+        return deque(data)
 
     def _set_queue(self, address, queue):
         """Set a queue at a given key to the cache.
@@ -169,11 +195,13 @@ class DataQueueManager:
         """Sets data to cache."""
         self.redis.set(key, json.dumps(data))
 
-    def _get_data(self, key):
+    def _get_data(self, key, default=None):
         """Gets data from cache."""
         data = self.redis.get(key)
         if data is not None:
             return json.loads(data.decode())
+        else:
+            return default
 
     def _delete_data(self, *keys):
         self.redis.delete(*keys)
@@ -201,3 +229,7 @@ class DataQueueManager:
     @staticmethod
     def _get_last_access_key(address):
         return '{address}_last_access'.format(address=address).encode()
+
+    @staticmethod
+    def _get_traffic_key(address):
+        return '{address}_traffic'.format(address=address).encode()
