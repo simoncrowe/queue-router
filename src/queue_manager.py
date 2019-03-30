@@ -9,8 +9,6 @@ import random
 import time
 from uuid import uuid4
 
-from util import int_factor_round
-
 
 class DataQueueManager:
     """Maintains queues of data and provides access to them using addresses."""
@@ -19,33 +17,29 @@ class DataQueueManager:
         self.redis = Redis()
 
     def register(self):
-        address = str(uuid4())
-        self._set_queue(address=address, queue=deque())
-        self.record_access(address)
-        return address
+        identity = str(uuid4())
+        self._set_queue(address=identity, queue=deque())
 
-    def authenticate(self, identity, token, factor):
+        epoch = str(time.time())
+        token = self._generate_token(identity, epoch)
+        self._set_token(address=identity, token=token)
+
+        self.record_access(identity)
+
+        return identity, epoch
+
+    def authenticate(self, identity, token):
         """Determines whether an id and token are valid.
 
         Args:
             identity: the identity or address of a node requesting access.
             token: the security token used by that node.
-            factor: the factor restricting time steps.
 
         Returns:
             bool: True if the node is authorised, otherwise false.
         """
         if self._queue_exists(address=identity):
-            current_time = int(time.time())
-            # Earlier/later tokens allow client time to deviate from server time
-            if token in (
-                    self._generate_token(
-                        identity,
-                        current_time + factor * i,
-                        factor
-                    )
-                    for i in range(-1, 2)
-            ):
+            if token == self._get_token(address=identity):
                 self.record_access(identity)
                 return True
 
@@ -140,10 +134,19 @@ class DataQueueManager:
             last_access_key = self._get_last_access_key(address)
             last_access = self._get_data(last_access_key)
 
-            if time.time() - last_access > inactivity_threshold:
+            if (
+                    type(last_access) is not float or
+                    time.time() - last_access > inactivity_threshold
+            ):
+                token_key = self._get_token_key(address)
                 queue_key = self._get_queue_key(address)
                 traffic_key = self._get_traffic_key(address)
-                self._delete_data(last_access_key, queue_key, traffic_key)
+                self._delete_data(
+                    last_access_key,
+                    token_key,
+                    queue_key,
+                    traffic_key
+                )
 
     def record_traffic(self, sender_address, recipient_address):
         traffic_key = self._get_traffic_key(sender_address)
@@ -191,6 +194,14 @@ class DataQueueManager:
             data=list(queue)
         )
 
+    def _get_token(self, address):
+        token_key = self._get_token_key(address)
+        return self._get_data(token_key, address)
+
+    def _set_token(self, address, token):
+        epoch_key = self._get_token_key(address)
+        return self._set_data(epoch_key, token)
+
     def _set_data(self, key, data):
         """Sets data to cache."""
         self.redis.set(key, json.dumps(data))
@@ -214,11 +225,11 @@ class DataQueueManager:
         ]
 
     @staticmethod
-    def _generate_token(identity, seconds, base=10):
+    def _generate_token(identity, epoch):
         return sha256(
             '{id}-{timestamp}'.format(
                 id=identity,
-                timestamp=int_factor_round(seconds, base),
+                timestamp=epoch
             ).encode('utf-8')
         ).hexdigest()
 
@@ -227,9 +238,14 @@ class DataQueueManager:
         return '{address}_queue'.format(address=address).encode()
 
     @staticmethod
+    def _get_token_key(address):
+        return '{address}_token'.format(address=address).encode()
+
+    @staticmethod
     def _get_last_access_key(address):
         return '{address}_last_access'.format(address=address).encode()
 
     @staticmethod
     def _get_traffic_key(address):
         return '{address}_traffic'.format(address=address).encode()
+

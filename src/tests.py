@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Quick and dirty "unit" tests for API. Too long but do the job."""
+"""Quick and dirty "unit" tests for API. Too complex but do the job."""
 
 from multiprocessing import Process
 import unittest
@@ -10,7 +10,6 @@ import time
 import requests
 
 from app import app, queue_manager
-from util import int_factor_round
 
 
 class CallLocalApiTestCase(unittest.TestCase):
@@ -21,20 +20,20 @@ class CallLocalApiTestCase(unittest.TestCase):
         cls.test_server.start()
         # Wait for the test server to start
         time.sleep(1)
-        cls.registered_addresses = [
+        cls.registered_addresses_details = [
             requests.get(
                 'http://127.0.0.1:5000/register'
-            ).json()['identity']
+            ).json()
             for i in range(10)
         ]
-        cls.registered_address = requests.get(
+        cls.registered_address_details = requests.get(
             'http://127.0.0.1:5000/register'
-        ).json()['identity']
+        ).json()
 
         # registered_id is used as an id when authenticating
-        cls.registered_id = requests.get(
+        cls.registered_id_details = requests.get(
             'http://127.0.0.1:5000/register'
-        ).json()['identity']
+        ).json()
 
     @classmethod
     def tearDownClass(cls):
@@ -53,6 +52,11 @@ class CallLocalApiTestCase(unittest.TestCase):
             response.json(),
             '\'address\' key not in response JSON of \'register\' endpoint.'
         )
+        self.assertIn(
+            'epoch',
+            response.json(),
+            '\'epoch\' key not in response JSON of \'register\' endpoint.'
+        )
         address_is_uuid = True
         try:
             uuid.UUID(response.json().get('identity'), version=4)
@@ -65,7 +69,9 @@ class CallLocalApiTestCase(unittest.TestCase):
         )
 
     def test_enqueue_broadcast(self):
-        request_args = self.get_authentication_args(self.registered_id)
+        request_args = self.get_authentication_args(
+            **self.registered_id_details
+        )
         request_args['data'] = '["spam", "spam", "spam"]'
         response = requests.post(
             'http://127.0.0.1:5000/enqueue',
@@ -76,11 +82,11 @@ class CallLocalApiTestCase(unittest.TestCase):
             200,
             'Request to \'/enqueue\' returns non-OKAY status code.'
         )
-        for address in self.registered_addresses:
+        for address_details in self.registered_addresses_details:
             response = requests.get(
                 'http://127.0.0.1:5000/dequeue'
                 '?identity={identity}&token={token}'.format(
-                    **self.get_authentication_args(address)
+                    **self.get_authentication_args(**address_details)
                 )
             )
             self.assertEqual(
@@ -95,11 +101,13 @@ class CallLocalApiTestCase(unittest.TestCase):
             )
 
     def test_enqueue_addressed(self):
-        request_args = self.get_authentication_args(self.registered_id)
+        request_args = self.get_authentication_args(
+            **self.registered_id_details
+        )
         request_args.update(
             {
                 'data': '["spam", "spam", "spam"]',
-                'address': self.registered_address,
+                'address': self.registered_address_details['identity'],
             }
         )
         response = requests.post(
@@ -114,7 +122,9 @@ class CallLocalApiTestCase(unittest.TestCase):
         response = requests.get(
             'http://127.0.0.1:5000/dequeue'
             '?identity={identity}&token={token}'.format(
-                **self.get_authentication_args(self.registered_address)
+                **self.get_authentication_args(
+                    **self.registered_address_details
+                )
             )
         )
         self.assertEqual(
@@ -128,28 +138,23 @@ class CallLocalApiTestCase(unittest.TestCase):
             'Broadcast-dequeued data is not equal to enqueued data.'
         )
 
-    def test_secs(self):
-        response = requests.get('http://127.0.0.1:5000/secs')
+    def test_time(self):
+        response = requests.get(
+            'http://127.0.0.1:5000/time?token={token}'.format(
+                token=app.config['VISUALISER_TOKEN']
+            )
+        )
         self.assertEqual(
             response.status_code,
             200,
             'Request to \'/secs\' returns non-OKAY status code.'
         )
-        self.assertEqual(
-            response.content.decode(),
-            str(int_factor_round(time.time(), app.config['SECS_FACTOR'])),
-            '\'secs\' returned incorrect "factor-truncated" epoch time.'
-        )
 
     @staticmethod
-    def get_authentication_args(identity):
+    def get_authentication_args(identity, epoch):
         return {
             'identity': identity,
-            'token': queue_manager._generate_token(
-                identity,
-                int(time.time()),
-                app.config.get('SECS_FACTOR')
-            )
+            'token': queue_manager._generate_token(identity, epoch)
         }
 
 

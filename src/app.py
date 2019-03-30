@@ -10,7 +10,6 @@ from webargs import fields
 from webargs.flaskparser import use_kwargs
 
 from queue_manager import DataQueueManager
-from util import int_factor_round
 
 app = Flask(__name__)
 # TODO: implement narrower CORS headers
@@ -22,8 +21,12 @@ queue_manager = DataQueueManager()
 
 @app.route('/register', methods=['get'])
 def register():
+    identity, epoch = queue_manager.register()
     return jsonify(
-        {'identity': queue_manager.register()}
+        {
+            'identity': identity,
+            'epoch': epoch,
+        }
     )
 
 
@@ -38,7 +41,6 @@ def pair(identity, token):
     if queue_manager.authenticate(
         identity,
         token,
-        app.config.get('SECS_FACTOR')
     ):
         address = queue_manager.get_any_address(identity)
         if address:
@@ -61,11 +63,7 @@ def pair(identity, token):
     }
 )
 def enqueue(identity, token, data, address):
-    if queue_manager.authenticate(
-        identity,
-        token,
-        app.config.get('SECS_FACTOR')
-    ):
+    if queue_manager.authenticate(identity, token):
         result = queue_manager.enqueue(
             data,
             sender_id=identity,
@@ -88,11 +86,7 @@ def enqueue(identity, token, data, address):
     }
 )
 def dequeue(identity, token):
-    if queue_manager.authenticate(
-        identity,
-        token,
-        app.config.get('SECS_FACTOR')
-    ):
+    if queue_manager.authenticate(identity, token):
         result = queue_manager.dequeue(identity)
 
         if result:
@@ -114,14 +108,6 @@ def traffic(token):
         return jsonify(queue_manager.get_traffic())
 
     return Response('', status=401)
-
-
-@app.route('/secs', methods=['get'])
-def get_secs():
-    return Response(
-        str(int_factor_round(time.time(), app.config.get('SECS_FACTOR'))),
-        status=200
-    )
 
 
 @app.route('/time', methods=['get'])
