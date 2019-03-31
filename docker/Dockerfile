@@ -8,7 +8,8 @@ RUN apk update && \
         redis \
         supervisor && \
         mkdir /run/nginx  && \
-        mkdir /var/log/gunicorn
+        mkdir /var/log/gunicorn && \
+        mkdir /var/log/prune_inactive_queues
 
 COPY ./src /app
 COPY ./requirements.txt /app/requirements.txt
