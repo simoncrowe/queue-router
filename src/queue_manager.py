@@ -87,7 +87,8 @@ class DataQueueManager:
             self._set_queue(address, queue)
             self.record_traffic(
                 sender_address=sender_id,
-                recipient_address=address
+                recipient_address=address,
+                data=data,
             )
             return True
         return False
@@ -148,10 +149,13 @@ class DataQueueManager:
                     traffic_key
                 )
 
-    def record_traffic(self, sender_address, recipient_address):
+    def record_traffic(self, sender_address, recipient_address, data):
         traffic_key = self._get_traffic_key(sender_address)
         traffic_dict = self._get_data(traffic_key, default=dict())
-        traffic_dict[recipient_address] = time.time()
+        traffic_dict[recipient_address] = {
+            'time': time.time(),
+            'length': len(json.dumps(data))
+        }
         self._set_data(traffic_key, traffic_dict)
 
     def get_traffic(self):
